@@ -211,6 +211,7 @@ export function buildSeedReports(): TriageReport[] {
       rules_matched_patterns: result.rules_matched_patterns,
       llm_spans_dropped: result.llm_spans_dropped,
       import_source: null,
+      has_trace: false,
       bucket_final: result.bucket,
       severity_final: result.severity,
       routing_final: result.routing_suggestion,

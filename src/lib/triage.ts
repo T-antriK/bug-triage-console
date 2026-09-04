@@ -34,17 +34,18 @@ export async function runTriage(
   settingsOverride?: Settings,
 ): Promise<TriageOutcome> {
   const settings = settingsOverride ?? readSettings();
+  const verbose = settings.verbose; // capture a decision trace this run?
   const usingLlm =
     FEATURES.LLM_ENABLED && settings.provider !== 'none' && settings.apiKey.trim().length > 0;
 
   if (!usingLlm) {
-    return { result: runPipeline(input, { llm: null }), notice: null };
+    return { result: runPipeline(input, { llm: null, capture_trace: verbose }), notice: null };
   }
 
   const providerLabel = LLM_PROVIDERS[settings.provider].label;
   const model = settings.model ?? providerConfig(settings.provider).defaultModel ?? null;
   const started = Date.now();
-  const outcome = await callLlm(settings, input);
+  const outcome = await callLlm(settings, input, { capture: verbose });
   const elapsed = Date.now() - started;
 
   let notice: string | null = null;
@@ -84,6 +85,7 @@ export async function runTriage(
       llm: outcome,
       llm_provider: settings.provider,
       llm_model: model,
+      capture_trace: verbose,
     }),
     notice,
   };

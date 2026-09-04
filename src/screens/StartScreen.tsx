@@ -33,6 +33,7 @@ export default function StartScreen() {
       provider,
       model: provider === 'none' ? null : model.trim() || cfg.defaultModel,
       apiKey: needsKey ? apiKey : '',
+      verbose: existing.verbose, // preserved — toggled from the home footer
     });
     setSession(true);
     navigate(ROUTES.HOME);

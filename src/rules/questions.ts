@@ -58,28 +58,34 @@ export const QUESTIONS: Record<BucketId, readonly string[]> = {
 
 type ConditionalQuestion = {
   ask: string;
+  why: string; // plain-English trigger, shown in the verbose trace
   when: (input: TriageInput, signals: Signals, confidenceLow: boolean) => boolean;
 };
 
 export const CONDITIONAL_QUESTIONS: readonly ConditionalQuestion[] = [
   {
     ask: 'Do you have a Call ID we can trace?',
+    why: 'no call_id on the report',
     when: (input) => !input.call_id,
   },
   {
     ask: 'When did this first start?',
+    why: 'no started_at on the report',
     when: (input) => !input.started_at,
   },
   {
     ask: 'Roughly how many records are affected, and are the sources still available?',
+    why: "data_integrity is not 'clean'",
     when: (_input, s) => s.data_integrity !== 'clean',
   },
   {
     ask: 'Is this in the system prompt, meaning all calls, or a one-off generation?',
+    why: "exposure is 'legal'",
     when: (_input, s) => s.exposure === 'legal',
   },
   {
     ask: 'Can you paste the raw customer message verbatim?',
+    why: 'confidence is Low',
     when: (_input, _s, confidenceLow) => confidenceLow,
   },
 ];

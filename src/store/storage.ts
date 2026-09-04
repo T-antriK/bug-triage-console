@@ -4,7 +4,7 @@
 // flag, and settings (provider / model / key).
 // ============================================================
 
-import { SCHEMA_VERSION, STORAGE_KEYS } from '../config';
+import { FEATURES, SCHEMA_VERSION, STORAGE_KEYS } from '../config';
 import type { Settings } from '../types';
 
 const SCHEMA_META_KEY = 'triage.schema.v';
@@ -128,6 +128,31 @@ export function runMigrations(): void {
     }
   }
 
+  // v4 -> v5: TriageReport gained `has_trace`. Existing reports have no
+  // captured trace, so it is false. The trace store itself starts empty.
+  if (stored < 5) {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.REPORTS);
+      if (raw !== null) {
+        const rows = JSON.parse(raw) as Array<Record<string, unknown>>;
+        let changed = false;
+        for (const row of rows) {
+          if (!('has_trace' in row)) {
+            row.has_trace = false;
+            changed = true;
+          }
+          if (row.schema_version !== SCHEMA_VERSION) {
+            row.schema_version = SCHEMA_VERSION;
+            changed = true;
+          }
+        }
+        if (changed) localStorage.setItem(STORAGE_KEYS.REPORTS, JSON.stringify(rows));
+      }
+    } catch {
+      // A corrupt payload is left untouched; the read helpers fall back to [].
+    }
+  }
+
   try {
     localStorage.setItem(SCHEMA_META_KEY, String(SCHEMA_VERSION));
   } catch {
@@ -145,7 +170,14 @@ export function setSession(passed: boolean): void {
 }
 
 // ---- settings ----
-const DEFAULT_SETTINGS: Settings = { provider: 'none', model: null, apiKey: '' };
+const DEFAULT_SETTINGS: Settings = {
+  provider: 'none',
+  model: null,
+  apiKey: '',
+  // The verbose toggle defaults to the build-time flag until the user
+  // flips it in the home footer.
+  verbose: FEATURES.VERBOSE_MODE,
+};
 
 export function readSettings(): Settings {
   const s = read<Partial<Settings>>(STORAGE_KEYS.SETTINGS, {});
@@ -153,9 +185,19 @@ export function readSettings(): Settings {
     provider: s.provider ?? DEFAULT_SETTINGS.provider,
     model: s.model ?? DEFAULT_SETTINGS.model,
     apiKey: s.apiKey ?? DEFAULT_SETTINGS.apiKey,
+    verbose: typeof s.verbose === 'boolean' ? s.verbose : DEFAULT_SETTINGS.verbose,
   };
 }
 
 export function writeSettings(next: Settings): void {
   write(STORAGE_KEYS.SETTINGS, next);
+}
+
+/** Convenience: is verbose mode on right now? */
+export function isVerbose(): boolean {
+  return readSettings().verbose;
+}
+
+export function setVerbose(on: boolean): void {
+  writeSettings({ ...readSettings(), verbose: on });
 }

@@ -17,6 +17,11 @@ export const FEATURES = {
   SEED_DATA_ENABLED: true, // load the 15 examples as resolved on first run
   DUPLICATE_DETECTION: false, // flag near-identical open reports
   EVAL_HARNESS_ENABLED: true, // "Run all seeds" button in Data Files
+  // Default for the runtime "Verbose" toggle (home-screen footer). When
+  // this and the stored toggle are both off, NOTHING is captured — the
+  // pipeline is guarded at every call site, not inside the functions —
+  // and classification output is byte-identical to non-verbose.
+  VERBOSE_MODE: false,
 } as const;
 
 // ============================================================
@@ -26,7 +31,9 @@ export const FEATURES = {
 // v3 (Iteration 3): TriageReport gained `rules_matched_patterns` and
 // `llm_spans_dropped`. EvidenceSpan gained optional `provenance`.
 // v4 (Iteration 4): TriageReport gained `import_source`.
-export const SCHEMA_VERSION = 4;
+// v5 (Iteration 5): TriageReport gained `has_trace`. Full decision traces
+// live under STORAGE_KEYS.TRACES, not inline, capped at TRACE.STORE_CAP.
+export const SCHEMA_VERSION = 5;
 
 export const STORAGE_KEYS = {
   REPORTS: 'triage.reports.v1',
@@ -34,6 +41,32 @@ export const STORAGE_KEYS = {
   FEEDBACK: 'triage.feedback.v1',
   SETTINGS: 'triage.settings.v1',
   SESSION: 'triage.session.v1', // has the user passed the start screen
+  TRACES: 'triage.traces.v1', // decision traces, keyed by report id, capped
+} as const;
+
+// ============================================================
+// VERBOSE MODE / DECISION TRACE
+// ============================================================
+export const TRACE = {
+  // The pipeline steps a trace records, in pipeline.ts order. The trace
+  // always has exactly this many steps (llm_call records `skipped` when
+  // there was no model call).
+  STEP_IDS: [
+    'normalize',
+    'rules_bucket',
+    'llm_call',
+    'arbitration',
+    'tiebreaks',
+    'signals_merge',
+    'impact_escalation',
+    'severity',
+    'confidence',
+    'evidence',
+    'questions',
+  ] as const,
+  TRACE_SCHEMA_VERSION: 1,
+  RAW_BODY_MAX_CHARS: 4000, // llm_call raw response body is truncated to this
+  STORE_CAP: 50, // keep only the N most recent traces, evict oldest first
 } as const;
 
 // ============================================================
@@ -319,6 +352,7 @@ export const ACTIVITY_ACTIONS = {
   FEEDBACK_SUBMITTED: 'feedback.submitted',
   SEED_LOADED: 'seed.loaded',
   BULK_IMPORTED: 'bulk.imported',
+  RERUN_APPLIED: 'report.rerun_applied',
 } as const;
 
 export const ACTORS = {
@@ -456,6 +490,7 @@ export const REPORT_TABLE_COLUMNS = [
   'resolved_at',
   'resolution_note',
   'import_source',
+  'has_trace',
 ] as const;
 
 export const ACTIVITY_TABLE_COLUMNS = [
@@ -552,6 +587,11 @@ export const HOME_COPY = {
   NAV_DATA: 'Data files',
   FOOTER_CHANGE_KEY: 'Change model or key',
   FOOTER_FEEDBACK: 'Need help or Submit feedback to improve!',
+  FOOTER_VERBOSE_LABEL: 'Verbose',
+  FOOTER_VERBOSE_ON: 'on',
+  FOOTER_VERBOSE_OFF: 'off',
+  FOOTER_VERBOSE_TITLE:
+    'Capture a full decision trace on every triage run. Adds a Decision trace section to each report and a Re-run button.',
 } as const;
 
 // ---- Report form ----
@@ -624,6 +664,128 @@ export const REPORT_COPY = {
   DUPLICATE_PREFIX: 'This looks similar to ',
   DUPLICATE_SUFFIX: ' (in review).',
   DISCARDED_NOTE: 'This report was discarded and is read-only.',
+} as const;
+
+// ---- Decision trace (verbose mode) ----
+export const TRACE_COPY = {
+  SECTION_TITLE: 'Decision trace',
+  SECTION_HINT:
+    'How this triage was reached, step by step. Rules are named by their id in the rules tables, so you can go straight to the line to edit.',
+  COPY_JSON: 'Copy trace as JSON',
+  COPIED: 'Trace copied to clipboard.',
+  RERUN: 'Re-run triage',
+  RERUN_HINT:
+    'Runs the current rules against the same input and diffs the result against the stored trace. Nothing is overwritten until you Apply.',
+  RERUN_RUNNING: 'Re-running…',
+  RERUN_TITLE: 'Re-run vs. stored trace',
+  APPLY: 'Apply',
+  APPLY_HINT: 'Overwrite this report’s classification and trace with the re-run result.',
+  DISCARD_RERUN: 'Discard re-run',
+  DIFF_CHANGED: 'Changed',
+  DIFF_UNCHANGED: 'Unchanged',
+  DIFF_NONE_CHANGED: 'Nothing changed. The stored classification still matches the current rules.',
+  DIFF_CLASSIFICATION: 'Classification',
+  DIFF_BEFORE: 'stored',
+  DIFF_AFTER: 're-run',
+  EXPAND_ALL: 'Expand all',
+  COLLAPSE_ALL: 'Collapse all',
+  // step titles
+  STEP_TITLE: {
+    normalize: 'Normalize',
+    rules_bucket: 'Rules bucket',
+    llm_call: 'Model call',
+    arbitration: 'Arbitration',
+    tiebreaks: 'Tiebreaks',
+    signals_merge: 'Signals merge',
+    impact_escalation: 'Impact escalation',
+    severity: 'Severity',
+    confidence: 'Confidence',
+    evidence: 'Evidence',
+    questions: 'Prompts for more info',
+  },
+  // floor table
+  FLOOR_COL_ID: 'Floor id',
+  FLOOR_COL_CONDITION: 'Condition',
+  FLOOR_COL_VALUES: 'Signal values it saw',
+  FLOOR_COL_FIRED: 'Fired',
+  FLOOR_COL_LEVEL: 'Level after',
+  FLOOR_NOTE:
+    'The floors that did NOT fire matter as much as the ones that did — that is how you find a condition that is subtly wrong.',
+  // misc labels used across step details
+  L_ORIGINAL: 'Original',
+  L_NORMALISED: 'Normalised',
+  L_CHANGES: 'What changed',
+  L_NO_CHANGES: 'nothing — already clean lowercase ASCII',
+  L_SCORE: 'score',
+  L_HITS: 'patterns that hit',
+  L_NEGATIVES: 'negatives that hit',
+  L_RANKING: 'ranking',
+  L_PICKED: 'picked',
+  L_VIA: 'via',
+  L_SKIPPED: 'skipped',
+  L_PROVIDER: 'provider',
+  L_MODEL: 'model',
+  L_LATENCY: 'latency',
+  L_HTTP: 'HTTP status',
+  L_RAW_BODY: 'raw response body (truncated)',
+  L_FIELDS_KEPT: 'fields that survived validation',
+  L_FIELDS_DROPPED: 'fields dropped, and why',
+  L_RULES_BUCKET: 'rules bucket',
+  L_MODEL_BUCKET: 'model bucket',
+  L_AGREED: 'agreed',
+  L_WINNER: 'winner',
+  L_RULE: 'rule',
+  L_RAN: 'ran',
+  L_NOT_RUN: 'not run',
+  L_EVALUATED: 'rules evaluated',
+  L_FIRED: 'fired',
+  L_SIGNAL: 'signal',
+  L_RULES_VALUE: 'rules said',
+  L_MODEL_VALUE: 'model said',
+  L_MERGED: 'merged',
+  L_SOURCE: 'source won',
+  L_DROPDOWN: 'dropdown',
+  L_EFFECTIVE: 'effective',
+  L_TRIGGER: 'trigger keywords',
+  L_NARROWER: 'narrower-than-selected flag',
+  L_SHORT_CIRCUIT: 'outage short-circuit',
+  L_BASE: 'base grid cell',
+  L_SILENT_MOD: 'silent-failure modifier',
+  L_FINAL_LEVEL: 'final level',
+  L_BRANCH: 'confidence branch taken',
+  L_RESULT: 'result',
+  L_RULES_SPANS: 'spans from rules',
+  L_LLM_SPANS_KEPT: 'spans from the model that verified',
+  L_LLM_SPANS_DROPPED: 'model spans the substring guard rejected',
+  L_MERGE_DECISIONS: 'merge decisions',
+  L_FINAL_COUNT: 'spans kept',
+  L_BASE_BANK: 'base bank for the bucket',
+  L_CONDITIONALS_FIRED: 'conditionals that fired',
+  L_LLM_EXTRA: 'model-contributed question',
+  L_BEFORE_CAP: 'before the cap',
+  L_CUT_BY_CAP: 'cut by the cap',
+  L_FINAL: 'final list',
+  YES: 'yes',
+  NO: 'no',
+  NONE: 'none',
+  MS_SUFFIX: ' ms',
+} as const;
+
+// ---- Batch trace summary (Run all seeds, verbose on) ----
+export const BATCH_TRACE_COPY = {
+  TITLE: 'Batch trace summary',
+  HINT:
+    'Across the 15 seeds and the 30 hold-out cases (45 runs). A floor that never fires across 45 cases is either dead code or a condition that is wrong.',
+  FLOORS_TITLE: 'Floors — times fired / 45',
+  TIEBREAKS_TITLE: 'Tiebreaks — times fired / 45',
+  PATTERNS_TITLE: 'Bucket patterns — most frequent hits',
+  DISAGREEMENT_LINE: 'Rules / model bucket disagreements: ',
+  NEVER_FIRED: 'never fired',
+  COL_NAME: 'Name',
+  COL_COUNT: 'Count',
+  COL_KEYWORD: 'Keyword',
+  RULES_ONLY_NOTE:
+    'Run rules-only, so every run is a rules/model agreement by construction — the disagreement count is 0 here by design.',
 } as const;
 
 // ---- Feedback screen ----

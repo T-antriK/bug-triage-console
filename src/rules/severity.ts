@@ -26,7 +26,10 @@ import { SEVERITY_LEVELS } from '../config';
 import { hasAny } from './normalize';
 
 // Sev0 is the worst. Lower index = more severe.
-const RANK: Record<SeverityLevel, number> = {
+// Exported so the verbose trace reuses the exact same ranking helpers
+// rather than re-deriving them (no drift between severity() and its
+// explanation).
+export const RANK: Record<SeverityLevel, number> = {
   Sev0: 0,
   Sev1: 1,
   Sev2: 2,
@@ -34,7 +37,7 @@ const RANK: Record<SeverityLevel, number> = {
 };
 
 /** The more severe (lower rank) of two levels. */
-function moreSevere(a: SeverityLevel, b: SeverityLevel): SeverityLevel {
+export function moreSevere(a: SeverityLevel, b: SeverityLevel): SeverityLevel {
   return RANK[a] <= RANK[b] ? a : b;
 }
 
@@ -46,10 +49,13 @@ export const BASE_GRID: Record<'many' | 'single', Record<Signals['functional_los
   };
 
 // ---- Step 3: floors — evaluated in order, each takes the more severe of current and floor ----
+// `condition` is the plain-English version of `when`, shown in the verbose
+// floor table. Keep the two in sync when you edit a floor.
 type FloorRule = {
   id: string;
   floor: SeverityLevel;
   reason: string;
+  condition: string;
   when: (impact: Impact, s: Signals, lower: string) => boolean;
 };
 
@@ -59,6 +65,7 @@ export const FLOORS: readonly FloorRule[] = [
     floor: 'Sev0',
     reason:
       'Data loss is active and affects many callers. The cleanup window grows every hour.',
+    condition: "data_integrity is 'lost' AND data_loss_ongoing AND impact is 'many'",
     when: (impact, s) =>
       s.data_integrity === 'lost' && s.data_loss_ongoing && impact === 'many',
   },
@@ -66,24 +73,29 @@ export const FLOORS: readonly FloorRule[] = [
     id: 'compliance_systemic',
     floor: 'Sev0',
     reason: 'Compliance failure is reproducible on every call, not a one-off generation.',
+    condition: "exposure is 'legal' AND exposure_prompt_level",
     when: (_impact, s) => s.exposure === 'legal' && s.exposure_prompt_level,
   },
   {
     id: 'data_lost',
     floor: 'Sev1',
     reason: 'Data is unrecoverable without a backfill. Shipping the fix does not end this.',
+    condition: "data_integrity is 'lost'",
     when: (_impact, s) => s.data_integrity === 'lost',
   },
   {
     id: 'legal_exposure',
     floor: 'Sev1',
     reason: 'Legal or regulatory exposure. Caller count is close to irrelevant here.',
+    condition: "exposure is 'legal'",
     when: (_impact, s) => s.exposure === 'legal',
   },
   {
     id: 'financial_records',
     floor: 'Sev1',
     reason: 'Financial records affected. Reconciliation cost compounds.',
+    condition:
+      "data_integrity is not 'clean' AND the text mentions a financial record (see FINANCIAL_RECORDS_TERMS)",
     // Some orgs set this to Sev0. One-word change if you want that.
     when: (_impact, s, lower) =>
       s.data_integrity !== 'clean' && hasAny(lower, FINANCIAL_RECORDS_TERMS),
@@ -92,9 +104,21 @@ export const FLOORS: readonly FloorRule[] = [
     id: 'customer_harm',
     floor: 'Sev2',
     reason: 'The customer may act on materially wrong information.',
+    condition: "exposure is 'customer_harm'",
     when: (_impact, s) => s.exposure === 'customer_harm',
   },
 ];
+
+// The signal names each floor's condition reads. Used by the verbose
+// floor table to show only the values that mattered.
+export const FLOOR_SIGNAL_KEYS: Record<string, ReadonlyArray<keyof Signals>> = {
+  data_loss_ongoing_at_scale: ['data_integrity', 'data_loss_ongoing'],
+  compliance_systemic: ['exposure', 'exposure_prompt_level'],
+  data_lost: ['data_integrity'],
+  legal_exposure: ['exposure'],
+  financial_records: ['data_integrity'],
+  customer_harm: ['exposure'],
+};
 
 // "mentions financial records" for the financial_records floor.
 export const FINANCIAL_RECORDS_TERMS: readonly string[] = [
@@ -118,9 +142,15 @@ export const SILENT_MODIFIER = {
     'No error surfaced and the call looked normal. Damage accrues undetected until reconciliation.',
 } as const;
 
-function raiseBy(level: SeverityLevel, steps: number, cap: SeverityLevel): SeverityLevel {
+export function raiseBy(level: SeverityLevel, steps: number, cap: SeverityLevel): SeverityLevel {
   const target = Math.max(RANK[cap], RANK[level] - steps);
   return SEVERITY_LEVELS[target];
+}
+
+/** The gate on the silent-failure modifier — exported so the trace shows
+ *  the exact same test the modifier uses. */
+export function silentModifierGate(s: Signals): boolean {
+  return s.data_integrity !== 'clean' || s.functional_loss === 'broken';
 }
 
 export function severity(
@@ -161,7 +191,7 @@ export function severity(
   // truncated-but-present summary) is untidy, not silent damage, so the
   // modifier does not fire when the loss of function is only cosmetic and
   // the data is clean.
-  const silentBites = s.data_integrity !== 'clean' || s.functional_loss === 'broken';
+  const silentBites = silentModifierGate(s);
   if (s.silent_failure && silentBites) {
     const raised = raiseBy(level, SILENT_MODIFIER.raise, SILENT_MODIFIER.capAt);
     if (RANK[raised] < RANK[level]) {

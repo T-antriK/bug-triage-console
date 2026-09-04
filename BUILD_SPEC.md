@@ -4,7 +4,7 @@
 the repo root and say "Build the app described in BUILD_SPEC.md." Iterate by editing this
 file and re-running.
 
-> This file is the single source of truth. It has been updated through **Iteration 4**;
+> This file is the single source of truth. It has been updated through **Iteration 5**;
 > changes are marked by iteration inline.
 
 ---
@@ -90,11 +90,13 @@ bug-triage-console/            (built at the repo root)
 │   │   ├── questions.ts       # question bank + conditionals
 │   │   ├── secondaryTags.ts   # optional cross-cutting tags
 │   │   ├── duplicates.ts      # off by default
+│   │   ├── trace.ts           # Iteration 5: explain* functions + buildTrace (verbose only)
 │   │   └── __tests__/
 │   │       ├── expected.ts    # answer key for the 15 seeds
 │   │       ├── pipeline.test.ts
 │   │       ├── holdout.ts     # Iteration 2: 30-case generalization set
-│   │       └── holdout.test.ts# Iteration 2: asserts the rules-only floors
+│   │       ├── holdout.test.ts# Iteration 2: asserts the rules-only floors
+│   │       └── trace.test.ts  # Iteration 5: verbose on/off identical, no drift, eviction
 │   │
 │   ├── llm/
 │   │   ├── client.ts          # provider-agnostic fetch wrapper
@@ -103,8 +105,9 @@ bug-triage-console/            (built at the repo root)
 │   │   └── parse.ts           # strict JSON parse + validation
 │   │
 │   ├── store/
-│   │   ├── storage.ts         # localStorage read/write + migration
-│   │   ├── reports.ts         # CRUD + status transitions
+│   │   ├── storage.ts         # localStorage read/write + migration + settings (verbose)
+│   │   ├── reports.ts         # CRUD + status transitions + reclassifyReport (re-run apply)
+│   │   ├── traces.ts          # Iteration 5: decision trace store, 50-cap eviction
 │   │   ├── activity.ts        # append-only log
 │   │   ├── feedback.ts
 │   │   └── seed.ts            # the 15 examples
@@ -126,6 +129,8 @@ bug-triage-console/            (built at the repo root)
 │   │   ├── ThorHammer.tsx
 │   │   ├── SeverityBadge.tsx
 │   │   ├── ConfidenceBadge.tsx  # Iteration 2
+│   │   ├── DecisionTrace.tsx    # Iteration 5: the collapsed trace section + step details
+│   │   ├── TraceDiff.tsx        # Iteration 5: re-run vs. stored comparison
 │   │   ├── EvidenceHighlight.tsx
 │   │   ├── ReasonChain.tsx
 │   │   ├── StatusPill.tsx
@@ -168,15 +173,21 @@ Any single flag can be flipped to `false` and the app still runs, with the layou
 ### Storage
 
 ```ts
-export const SCHEMA_VERSION = 2;   // Iteration 2: was 1
+export const SCHEMA_VERSION = 5;   // v2 more_info/resolution_note · v3 rules_matched_patterns/
+                                   // llm_spans_dropped · v4 import_source · v5 has_trace
 export const STORAGE_KEYS = {
   REPORTS:  'triage.reports.v1',
   ACTIVITY: 'triage.activity.v1',
   FEEDBACK: 'triage.feedback.v1',
   SETTINGS: 'triage.settings.v1',
   SESSION:  'triage.session.v1',
+  TRACES:   'triage.traces.v1',   // Iteration 5: decision traces, keyed by report id, capped at 50
 } as const;
 ```
+
+Each schema bump ships an idempotent migration in `store/storage.ts` that backfills the
+new field(s) on existing records and re-stamps `schema_version`. Nothing is ever wiped or
+reseeded — a user with reports in flight keeps them.
 
 **Iteration 2 — schema v1 → v2.** `TriageReport` gains two persisted fields:
 
@@ -847,6 +858,64 @@ column 1 below New bug report.
 
 ---
 
+## 14. Verbose mode / decision trace (Iteration 5)
+
+A flag that exposes how each triage decision was reached, for tuning the rules.
+
+**Flag.** `FEATURES.VERBOSE_MODE` in `config.ts`, default `false`, is the build-time
+default. A runtime toggle in the home-screen footer (next to "Change model or key")
+flips `Settings.verbose` in the settings store; `readSettings()` falls back to
+`FEATURES.VERBOSE_MODE` until it is set. When verbose is off, nothing is captured — the
+guard is at the call site in `pipeline.ts` / `lib/triage.ts`, not inside the rule
+functions — so there is no cost and classification output is byte-identical.
+
+**Schema.** `SCHEMA_VERSION` → 5. `TriageReport` gains `has_trace: boolean` (default
+`false`). Full traces live under `STORAGE_KEYS.TRACES` as `StoredTrace[]`, keyed by
+report id, capped at `TRACE.STORE_CAP` (50), oldest evicted first. v4 → v5 migration
+backfills `has_trace: false`.
+
+**What is captured.** `src/rules/trace.ts` builds a `Trace` of exactly
+`TRACE.STEP_IDS.length` (11) steps, in pipeline order: `normalize`, `rules_bucket`,
+`llm_call`, `arbitration`, `tiebreaks`, `signals_merge`, `impact_escalation`,
+`severity`, `confidence`, `evidence`, `questions`. Each `TraceStep` has a one-line
+`summary` and a structured `detail`. The explain\* functions re-derive the "why" from the
+same rule tables the pipeline uses (`BUCKETS`, `FLOORS`, `TIEBREAKS`, `CONDITIONAL_QUESTIONS`,
+…) — never re-running a decision — and drift tests in `trace.test.ts` prove the
+explanation still agrees with the real function. The `llm_call` step's network detail
+(latency, HTTP status, raw response body truncated to `TRACE.RAW_BODY_MAX_CHARS` = 4000,
+which parsed fields survived validation vs were dropped and why) comes from
+`LlmOutcome.debug`, attached by `client.ts` only when `{ capture: true }`. **The API key
+never appears in a trace** — only the response body and status, never request headers.
+
+**Where it shows.** A "Decision trace" section at the bottom of the report page, visible
+only when `report.has_trace`, collapsed by default (`components/DecisionTrace.tsx`). Each
+step is its own expandable row: one-line summary → detail. The **severity** step renders
+every floor as a table — id, plain-English `condition` (a new field on each `FLOORS`
+entry, kept in sync with `when`), the signal values it evaluated against, fired yes/no,
+resulting level — floors that did NOT fire included.
+
+**Compare two runs.** A "Re-run triage" button (verbose only) re-runs the current rules
+against the same input (the original impact dropdown is recovered from
+`impact_escalated_from`) and shows a `TraceDiff` against the stored trace: which step
+summaries changed, plus a bucket/severity/confidence/routing before-after table. Nothing
+is overwritten until **Apply**, which calls `reclassifyReport(id, result)` — it swaps
+the computed fields and trace and keeps status, timestamps and any human overrides,
+logging `report.rerun_applied`.
+
+**Export.** "Copy trace as JSON" on the report; `has_trace` is a column in the Reports
+table under Data files.
+
+**Batch trace.** With verbose on, "Run all seeds" also captures traces across the 15
+seeds + 30 hold-out cases (45 runs) and rolls them into a summary: per-floor and
+per-tiebreak fire counts / 45 (with a "never fired" flag), most-frequent bucket-pattern
+hits, and the rules/model disagreement count (0 by construction in rules-only mode).
+
+**Constraints.** Verbose off → byte-identical `bucket` / `severity` / `confidence` /
+`evidence` (proven by `trace.test.ts` over all 45 inputs). No capture in the hot path
+when off. Nothing is redacted except the API key, which is never in a trace.
+
+---
+
 ## 13. Acceptance checklist
 
 Original:
@@ -888,3 +957,21 @@ Iteration 2:
 - [ ] No `_len=` token exists anywhere in the codebase
 - [ ] An override log entry contains the full override reason text
 - [ ] The hold-out set clears bucket ≥ 22/30 and severity ≥ 21/30 rules-only
+
+Iteration 5 (verbose mode):
+
+- [ ] A v4 localStorage payload loads without error and gains `has_trace: false`
+- [ ] With verbose off, same input produces identical bucket / severity / confidence /
+      evidence to today, and no trace is captured or stored
+- [ ] The home-footer toggle flips verbose and persists it in the settings store
+- [ ] A verbose triage run shows a collapsed "Decision trace" section with one row per
+      pipeline step (11)
+- [ ] The severity step shows every floor as a table, including the ones that did not fire
+- [ ] "Copy trace as JSON" copies a valid JSON trace; the Reports table has a `has_trace`
+      column
+- [ ] "Re-run triage" (verbose only) diffs against the stored trace and does not
+      overwrite until Apply; Apply keeps status and human overrides
+- [ ] "Run all seeds" with verbose on shows a batch trace summary over 45 runs, flagging
+      any floor / tiebreak that never fired
+- [ ] Trace store is capped at 50, oldest evicted first
+- [ ] The API key never appears anywhere in a trace

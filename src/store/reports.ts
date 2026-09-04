@@ -22,6 +22,7 @@ import type {
 } from '../types';
 import { readCollection, writeCollection } from './storage';
 import { log } from './activity';
+import { deleteTrace, writeTrace } from './traces';
 
 export function readReports(): TriageReport[] {
   return readCollection<TriageReport>(STORAGE_KEYS.REPORTS);
@@ -68,6 +69,7 @@ function emptyComputed(): Pick<
   | 'rules_matched_patterns'
   | 'llm_spans_dropped'
   | 'import_source'
+  | 'has_trace'
   | 'bucket_final'
   | 'severity_final'
   | 'routing_final'
@@ -107,6 +109,7 @@ function emptyComputed(): Pick<
     rules_matched_patterns: null,
     llm_spans_dropped: null,
     import_source: null,
+    has_trace: false,
     bucket_final: 'INFRA',
     severity_final: 'Sev3',
     routing_final: 'Platform/Infra',
@@ -269,6 +272,7 @@ export function submitReport(
     rules_matched_patterns: result.rules_matched_patterns,
     llm_spans_dropped: result.llm_spans_dropped,
     import_source: importSource,
+    has_trace: result.trace != null,
     // _final initialised equal to computed
     bucket_final: result.bucket,
     severity_final: result.severity,
@@ -283,6 +287,7 @@ export function submitReport(
   };
   rows[i] = merged;
   writeReports(rows);
+  if (result.trace) writeTrace(id, result.trace);
 
   log({
     report_id: id,
@@ -326,6 +331,65 @@ export function submitReport(
     field: 'routing_suggestion',
     value_to: result.routing_suggestion,
     detail: `routing=${result.routing_suggestion} escalations=[${result.escalations.join('; ')}]`,
+  });
+  return merged;
+}
+
+// ---- re-run: overwrite the classification + trace, keep the lifecycle ----
+// The tuning loop (verbose mode): edit a rule, re-run, Apply. Status,
+// timestamps and any human overrides are left alone — only the computed
+// recommendation and the trace change. `_final` fields follow the new
+// computed value unless the human already overrode that specific field.
+export function reclassifyReport(id: string, result: PipelineResult): TriageReport | undefined {
+  const rows = readReports();
+  const i = rows.findIndex((r) => r.id === id);
+  if (i < 0) return undefined;
+  const prev = rows[i];
+  const now = new Date().toISOString();
+
+  const bucketOverridden = prev.was_overridden && prev.bucket_final !== prev.bucket;
+  const severityOverridden = prev.was_overridden && prev.severity_final !== prev.severity;
+  const routingOverridden = prev.was_overridden && prev.routing_final !== prev.routing_suggestion;
+
+  const merged: TriageReport = {
+    ...prev,
+    bucket: result.bucket,
+    secondary_tags: result.secondary_tags,
+    severity: result.severity,
+    confidence: result.confidence,
+    routing_suggestion: result.routing_suggestion,
+    evidence: result.evidence,
+    reason_chain: result.reason_chain,
+    next_questions: result.next_questions,
+    signals: result.signals,
+    escalations: result.escalations,
+    impact_escalated_from: result.impact_escalated_from,
+    narrower_than_selected: result.narrower_than_selected,
+    classifier_mode: result.classifier_mode,
+    llm_agreed: result.llm_agreed,
+    rules_bucket: result.rules_bucket,
+    llm_bucket: result.llm_bucket,
+    llm_rationale: result.llm_rationale,
+    rules_matched_patterns: result.rules_matched_patterns,
+    llm_spans_dropped: result.llm_spans_dropped,
+    has_trace: result.trace != null,
+    bucket_final: bucketOverridden ? prev.bucket_final : result.bucket,
+    severity_final: severityOverridden ? prev.severity_final : result.severity,
+    routing_final: routingOverridden ? prev.routing_final : result.routing_suggestion,
+    updated_at: now,
+  };
+  rows[i] = merged;
+  writeReports(rows);
+  if (result.trace) writeTrace(id, result.trace);
+
+  log({
+    report_id: id,
+    actor: ACTORS.USER,
+    action: ACTIVITY_ACTIONS.RERUN_APPLIED,
+    field: 'bucket',
+    value_from: prev.bucket,
+    value_to: result.bucket,
+    detail: `rerun_applied bucket ${prev.bucket}->${result.bucket} severity ${prev.severity}->${result.severity} confidence ${prev.confidence}->${result.confidence} by=user`,
   });
   return merged;
 }
@@ -439,8 +503,9 @@ export function discardReport(id: string): void {
   if (i < 0) return;
   const prev = rows[i];
   const now = new Date().toISOString();
-  rows[i] = { ...prev, status: 'discarded', updated_at: now };
+  rows[i] = { ...prev, status: 'discarded', has_trace: false, updated_at: now };
   writeReports(rows);
+  deleteTrace(id);
   log({
     report_id: id,
     actor: ACTORS.USER,

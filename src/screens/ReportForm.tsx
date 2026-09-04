@@ -15,6 +15,7 @@ import {
   ROUTES,
   ROUTING_TEAMS,
   SEVERITY_LEVELS,
+  TRACE_COPY,
   UI,
   VALIDATION,
   VALIDATION_MESSAGES,
@@ -22,9 +23,11 @@ import {
 import type {
   BucketId,
   Impact,
+  PipelineResult,
   ReportStatus,
   RoutingTeam,
   SeverityLevel,
+  Trace,
   TriageInput,
   TriageReport,
 } from '../types';
@@ -33,12 +36,15 @@ import {
   discardReport,
   getReport,
   readReports,
+  reclassifyReport,
   resolveReport,
   routeReport,
   submitReport,
   updateDraft,
   updateMoreInfo,
 } from '../store/reports';
+import { readTrace } from '../store/traces';
+import { readSettings } from '../store/storage';
 import { runTriage } from '../lib/triage';
 import { formatDate } from '../lib/format';
 import { findDuplicate } from '../rules/duplicates';
@@ -48,6 +54,8 @@ import { StatusPill } from '../components/StatusPill';
 import { EvidenceHighlight } from '../components/EvidenceHighlight';
 import { ReasonChain } from '../components/ReasonChain';
 import { Modal } from '../components/Modal';
+import { DecisionTrace } from '../components/DecisionTrace';
+import { TraceDiff } from '../components/TraceDiff';
 import { ROUTING } from '../rules/routing';
 
 type FormFields = {
@@ -117,6 +125,12 @@ export default function ReportForm() {
   const moreInfoTimer = useRef<number | null>(null);
   const moreInfoDirty = useRef(false);
 
+  // verbose mode — decision trace + re-run
+  const verbose = useMemo(() => readSettings().verbose, []);
+  const [trace, setTrace] = useState<Trace | null>(null);
+  const [rerun, setRerun] = useState<{ result: PipelineResult; trace: Trace } | null>(null);
+  const [rerunning, setRerunning] = useState(false);
+
   const flushMoreInfo = useCallback(
     (reportId: string | undefined) => {
       if (moreInfoTimer.current) {
@@ -152,6 +166,8 @@ export default function ReportForm() {
     setLowConfConfirmed(false);
     setMoreInfo(r.more_info ?? '');
     moreInfoDirty.current = false;
+    setTrace(r.has_trace ? readTrace(r.id) : null);
+    setRerun(null);
   }, [id, navigate]);
 
   useEffect(() => {
@@ -349,6 +365,42 @@ export default function ReportForm() {
       ?.writeText(report.next_questions.map((q) => `- ${q}`).join('\n'))
       .then(() => toast(REPORT_COPY.QUESTIONS_COPIED))
       .catch(() => undefined);
+  }
+
+  function copyTrace() {
+    if (!trace) return;
+    navigator.clipboard
+      ?.writeText(JSON.stringify(trace, null, 2))
+      .then(() => toast(TRACE_COPY.COPIED))
+      .catch(() => undefined);
+  }
+
+  // Re-run the current rules against the same input. The original impact
+  // dropdown value is recoverable from impact_escalated_from.
+  async function onRerun() {
+    if (!report || rerunning) return;
+    setRerunning(true);
+    try {
+      const dropdownImpact: Impact = report.impact_escalated_from ?? report.impact;
+      const { result } = await runTriage(
+        { ...toInput(fieldsFromReport(report)), impact: dropdownImpact },
+        report.id,
+      );
+      if (result.trace) setRerun({ result, trace: result.trace });
+    } finally {
+      setRerunning(false);
+    }
+  }
+
+  function onApplyRerun() {
+    if (!report || !rerun) return;
+    const updated = reclassifyReport(report.id, rerun.result);
+    if (updated) {
+      setRerun(null);
+      setReport(updated);
+      load();
+      toast(MESSAGES.TRIAGE_DONE);
+    }
   }
 
   const routeBlocked =
@@ -815,6 +867,57 @@ export default function ReportForm() {
                   <p>{report.override_reason}</p>
                 </div>
               </div>
+            </>
+          )}
+
+          {/* ---- decision trace (verbose mode) ---- */}
+          {trace && (
+            <>
+              <hr className="section-rule" />
+              <DecisionTrace
+                trace={trace}
+                headerActions={
+                  <>
+                    <button type="button" className="btn-link small" onClick={copyTrace}>
+                      {TRACE_COPY.COPY_JSON}
+                    </button>
+                    {verbose && !rerun && (
+                      <button
+                        type="button"
+                        className="btn-link small"
+                        onClick={onRerun}
+                        disabled={rerunning}
+                        title={TRACE_COPY.RERUN_HINT}
+                      >
+                        {rerunning ? TRACE_COPY.RERUN_RUNNING : TRACE_COPY.RERUN}
+                      </button>
+                    )}
+                  </>
+                }
+              />
+              {rerun && (
+                <div className="trace-rerun">
+                  <TraceDiff
+                    before={trace}
+                    after={rerun.trace}
+                    storedReport={report}
+                    rerunResult={rerun.result}
+                  />
+                  <div className="row" style={{ marginTop: 'var(--s-3)' }}>
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      onClick={onApplyRerun}
+                      title={TRACE_COPY.APPLY_HINT}
+                    >
+                      {TRACE_COPY.APPLY}
+                    </button>
+                    <button type="button" className="btn" onClick={() => setRerun(null)}>
+                      {TRACE_COPY.DISCARD_RERUN}
+                    </button>
+                  </div>
+                </div>
+              )}
             </>
           )}
         </>

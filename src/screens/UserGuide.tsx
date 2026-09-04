@@ -169,6 +169,46 @@ export default function UserGuide() {
         </li>
       </ul>
 
+      <h2>Reading a decision trace</h2>
+      <p>
+        Turn <strong>Verbose</strong> on in the home-screen footer. Every triage run
+        from then on captures a full <strong>Decision trace</strong>, shown as its own
+        collapsed section at the bottom of the report. Each pipeline step is a row: a
+        one-line summary you can read at a glance, expanding to the detail. Steps are in
+        pipeline order — <em>normalize, rules bucket, model call, arbitration,
+        tiebreaks, signals merge, impact escalation, severity, confidence, evidence,
+        prompts</em>.
+      </p>
+      <p>
+        Everything is named the way it is named in the rules files. If the{' '}
+        <strong>severity</strong> step shows a floor called{' '}
+        <code>data_loss_ongoing_at_scale</code> firing when it should not have, that is
+        the exact id to search for in <code>src/rules/severity.ts</code>. The severity
+        step renders <strong>every</strong> floor as a table — id, the plain-English
+        condition, the signal values it evaluated against, whether it fired, and the
+        level after it. The floors that did <em>not</em> fire are shown too: that is how
+        you find a condition that is subtly wrong.
+      </p>
+      <p>
+        The trace is observation only. It never changes a decision, and turning Verbose
+        off leaves classification output byte-for-byte identical. Traces are stored
+        separately from the report (they can be large), capped at the 50 most recent.
+      </p>
+      <p>
+        <strong>Copy trace as JSON</strong> copies the whole trace to the clipboard.
+        The Reports table under <a href={ROUTES.DATA}>Data files</a> has a{' '}
+        <code>has_trace</code> column.
+      </p>
+      <p>
+        <strong>Re-run triage</strong> (verbose only) runs the current rules against the
+        same input and diffs the result against the stored trace: what moved, what
+        stayed. Nothing is overwritten until you click <strong>Apply</strong>. This is
+        the tuning loop — edit a rule, re-run, see exactly what changed. On Data files,{' '}
+        <strong>Run all seeds</strong> with Verbose on also rolls up a{' '}
+        <strong>batch trace summary</strong> across the 15 seeds and 30 hold-out cases:
+        which floors and tiebreaks fired and how often, and which never fired at all.
+      </p>
+
       <h2>Bulk upload</h2>
       <p>
         The <a href={ROUTES.BULK}>Bulk upload</a> screen lets you triage many reports in

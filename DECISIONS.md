@@ -300,3 +300,86 @@ Deliberate remaining hold-out misses:
   Activity log shifts to row 3. Thor's centre column now spans rows 2–3. The three-column
   grid still holds at desktop width; the mobile fallback (`grid-column: 1 !important`)
   stacks all buttons in one column as before.
+
+---
+
+# Iteration 5: verbose mode / decision trace
+
+## Where the "why" is derived
+
+The pipeline steps are pure functions that mostly return only their result, not their
+reasoning. Two options for capturing the reasoning: (a) thread a trace callback through
+every rule function, or (b) a parallel set of `explain*` functions that re-derive the
+detail from the same rule tables.
+
+Chose **(b)**, in `src/rules/trace.ts`, because it keeps the hot path completely
+untouched when verbose is off — the guard is `if (opts.capture_trace)` at the call site
+in `pipeline.ts`, and nothing in `trace.ts` runs otherwise. The drift risk (an `explain*`
+function disagreeing with the real function) is covered by `trace.test.ts`:
+`explainSeverity().final_level` is checked against `severity().level` over a 216-row
+signal matrix × 3 impacts, `explainConfidence().result` against `computeConfidence()`
+over every branch, and `explainRulesBucket()` scores against `scoreBuckets()` over all 45
+seed + hold-out inputs.
+
+Small additive changes to the rule files to make them self-describing, all benign:
+`severity.ts` — each `FLOORS` entry gained a plain-English `condition` string and the
+`RANK` / `moreSevere` / `raiseBy` / `silentModifierGate` helpers are now exported so the
+trace reuses the exact same ones; `questions.ts` — each `CONDITIONAL_QUESTIONS` entry
+gained a `why` string; `pipeline.ts` — `runRulesPass` and `arbitrate` return a few extra
+descriptor strings (`pick_via`, `decision`, …). None of these change a computed value.
+
+## The flag and the toggle
+
+`FEATURES.VERBOSE_MODE` is the build-time default; the runtime control is
+`Settings.verbose`, flipped from the home footer. `readSettings()` defaults `verbose` to
+`FEATURES.VERBOSE_MODE` until the toggle is used, so both "ship it on" and "flip it
+without editing code" work. Effective verbose is just `readSettings().verbose` — there is
+no `FLAG && setting` gate that would make the toggle a no-op.
+
+## The llm_call step
+
+The network detail (latency, HTTP status, raw body, which parsed fields survived) is not
+visible to `runPipeline` — it happens in `client.ts`. Rather than post-process the trace
+in `lib/triage.ts`, `callLlm(settings, input, { capture })` attaches an
+`LlmOutcome.debug` object, and `runPipeline` reads `opts.llm.debug` when building the
+`llm_call` step. So the whole trace is assembled in one place. `debug` is only built when
+`capture` is true. It stores the **response** body (truncated to 4000 chars) and status
+— never the request headers, so the API key is structurally impossible to leak into a
+trace.
+
+`client.ts` now does `res.text()` then `JSON.parse` instead of `res.json()`, so it can
+keep the raw body for the trace. Functionally identical for the non-verbose path.
+
+## Storage
+
+Traces are large (~12 KB JSON each), so they live under their own key
+(`STORAGE_KEYS.TRACES`) as `StoredTrace[]`, not inline on the report. The report carries
+only `has_trace: boolean`. `writeTrace` replaces any existing trace for the id, then
+`evictOldest(rows, 50)` keeps the 50 most recent by `captured_at`. `evictOldest` is a
+pure exported function so the cap is unit-tested without a DOM.
+
+## Re-run and Apply
+
+`reclassifyReport(id, result)` is a new transition that overwrites the computed
+recommendation and the trace but leaves `status`, timestamps and any human override in
+place — a routed report stays routed after Apply. `_final` fields follow the new computed
+value unless that specific field was already overridden. Logged as `report.rerun_applied`
+with before/after values. The re-run reconstructs the original impact dropdown from
+`impact_escalated_from` (the one input that is not round-trippable from the stored
+report, since submit overwrites `impact` with the effective value).
+
+## Batch trace
+
+"Run all seeds" with verbose on runs `runPipeline(input, { capture_trace: true })` over
+the 15 seeds + 30 hold-out cases (45), and rolls up per-floor / per-tiebreak fire counts
+and bucket-pattern hit frequencies. It surfaced that `tool_misuse_is_reasoning` fires 0/45
+in rules-only mode — the tiebreak ladder only runs when there are ≥ 2 contending buckets,
+and the cases that would exercise that rule score a single bucket. Left as-is: it is an
+existing-code observation the tool is meant to reveal, not a regression from this
+iteration.
+
+## Constraint verification
+
+`trace.test.ts` runs `runPipeline` with and without `capture_trace` over all 45 inputs
+and asserts the results are deep-equal minus the `trace` field, plus explicit checks on
+`bucket` / `severity` / `confidence` / `evidence`. 117 tests total (was 62).

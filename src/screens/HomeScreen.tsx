@@ -1,6 +1,7 @@
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { FEATURES, HOME_COPY, ROUTES } from '../config';
-import { setSession } from '../store/storage';
+import { isVerbose, setSession, setVerbose } from '../store/storage';
 import { ThorHammer } from '../components/ThorHammer';
 
 /** The control room. Five nav buttons in fixed positions around the
@@ -9,10 +10,17 @@ import { ThorHammer } from '../components/ThorHammer';
 export default function HomeScreen() {
   const navigate = useNavigate();
   const thor = FEATURES.THOR_HAMMER_ENABLED;
+  const [verbose, setVerboseState] = useState(isVerbose());
 
   function changeKey() {
     setSession(false);
     navigate(ROUTES.START);
+  }
+
+  function toggleVerbose() {
+    const next = !verbose;
+    setVerbose(next);
+    setVerboseState(next);
   }
 
   return (
@@ -54,6 +62,16 @@ export default function HomeScreen() {
       <div className="home-foot">
         <button type="button" className="btn-link" onClick={changeKey}>
           {HOME_COPY.FOOTER_CHANGE_KEY}
+        </button>
+        <button
+          type="button"
+          className="btn-link"
+          onClick={toggleVerbose}
+          aria-pressed={verbose}
+          title={HOME_COPY.FOOTER_VERBOSE_TITLE}
+        >
+          {HOME_COPY.FOOTER_VERBOSE_LABEL}:{' '}
+          <strong>{verbose ? HOME_COPY.FOOTER_VERBOSE_ON : HOME_COPY.FOOTER_VERBOSE_OFF}</strong>
         </button>
         <a href={ROUTES.FEEDBACK} target="_blank" rel="noreferrer">
           {HOME_COPY.FOOTER_FEEDBACK}
