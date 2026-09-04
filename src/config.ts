@@ -84,7 +84,7 @@ export const LLM_PROVIDERS = {
     label: 'Moonshot (Kimi)',
     endpoint: 'https://api.moonshot.ai/v1/chat/completions',
     shape: 'openai', // OpenAI-compatible request/response
-    defaultModel: 'kimi-k2-0905-preview',
+    defaultModel: 'kimi-k2.6',
     modelSuggestions: ['kimi-k2-0905-preview', 'moonshot-v1-32k'],
     keyPlaceholder: 'sk-...',
     keyHeader: 'Authorization',
