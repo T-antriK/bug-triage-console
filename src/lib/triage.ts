@@ -69,11 +69,13 @@ export async function runTriage(
     });
   } else {
     notice = LLM_NOTICE.GENERIC_FALLBACK.replace('{provider}', providerLabel);
+    const cfg = providerConfig(settings.provider);
+    const timeoutMs = (cfg as { timeoutMs?: number }).timeoutMs ?? LLM_CONFIG.TIMEOUT_MS;
     log({
       report_id: reportId,
       actor: ACTORS.SYSTEM,
       action: ACTIVITY_ACTIONS.LLM_FAILED,
-      detail: `llm ${outcome.failure} provider=${settings.provider} model=${model} timeout=${LLM_CONFIG.TIMEOUT_MS}ms fallback=rules confidence=Low`,
+      detail: `llm ${outcome.failure} provider=${settings.provider} model=${model} timeout=${timeoutMs}ms fallback=rules confidence=Low`,
     });
   }
 

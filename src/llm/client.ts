@@ -33,7 +33,9 @@ async function once(
   if (!req) return { ok: false, failure: LLM_FAILURES.DISABLED };
 
   const controller = new AbortController();
-  const timer = window.setTimeout(() => controller.abort(), LLM_CONFIG.TIMEOUT_MS);
+  const cfg = providerConfig(settings.provider);
+  const timeoutMs = (cfg as { timeoutMs?: number }).timeoutMs ?? LLM_CONFIG.TIMEOUT_MS;
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const res = await fetch(req.url, {

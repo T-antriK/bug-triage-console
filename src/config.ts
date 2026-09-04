@@ -54,6 +54,7 @@ export const LLM_PROVIDERS = {
     modelSuggestions: ['claude-sonnet-4-5', 'claude-opus-4-1', 'claude-haiku-4-5'],
     keyPlaceholder: 'sk-ant-...',
     keyHeader: 'x-api-key',
+    supportsTemperature: true,
     extraHeaders: {
       'anthropic-version': '2023-06-01',
       'anthropic-dangerous-direct-browser-access': 'true',
@@ -67,6 +68,7 @@ export const LLM_PROVIDERS = {
     modelSuggestions: ['gpt-4o', 'gpt-4o-mini'],
     keyPlaceholder: 'sk-...',
     keyHeader: 'Authorization', // value is `Bearer ${key}`
+    supportsTemperature: true,
     extraHeaders: {},
   },
   gemini: {
@@ -78,16 +80,33 @@ export const LLM_PROVIDERS = {
     modelSuggestions: ['gemini-2.5-flash', 'gemini-2.5-pro'],
     keyPlaceholder: 'AIza...',
     keyHeader: 'x-goog-api-key',
+    supportsTemperature: true,
     extraHeaders: {},
   },
   kimi: {
     label: 'Moonshot (Kimi)',
+    // Global platform. China platform is api.moonshot.cn; keys are NOT
+    // interchangeable. Verified reachable direct from browser (returns 401
+    // on bad auth rather than a CORS block), so no proxy needed.
     endpoint: 'https://api.moonshot.ai/v1/chat/completions',
-    shape: 'openai', // OpenAI-compatible request/response
+    proxyPath: '/api/kimi/v1/chat/completions',
+    requiresProxy: false,
+    modelsEndpoint: 'https://api.moonshot.ai/v1/models',
+    shape: 'openai',
     defaultModel: 'kimi-k2.6',
-    modelSuggestions: ['kimi-k2-0905-preview', 'moonshot-v1-32k'],
+    // Verified live from GET /v1/models. kimi-k3 has mandatory reasoning
+    // at max effort by default — too slow for classification.
+    modelSuggestions: ['kimi-k2.6', 'kimi-k3', 'kimi-k2.7-code'],
     keyPlaceholder: 'sk-...',
-    keyHeader: 'Authorization',
+    keyHeader: 'Authorization', // authHeaders in providers.ts sends `Bearer ${key.trim()}`
+    // kimi-k2.6 is a reasoning model: rejects temperature != 1 with 400.
+    // Omitting the field lets the server use its default.
+    supportsTemperature: false,
+    // Reasoning tokens count against max_tokens. 1500 is exhausted before
+    // content is written; 8000 gives enough headroom for reasoning + output.
+    maxTokens: 8000,
+    // Reasoning models take longer than the global 20 s default.
+    timeoutMs: 60000,
     extraHeaders: {},
   },
   none: {
@@ -98,6 +117,7 @@ export const LLM_PROVIDERS = {
     modelSuggestions: [],
     keyPlaceholder: '',
     keyHeader: null,
+    supportsTemperature: false,
     extraHeaders: {},
   },
 } as const;

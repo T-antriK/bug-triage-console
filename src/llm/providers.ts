@@ -34,7 +34,7 @@ function authHeaders(id: ProviderId, apiKey: string): Record<string, string> {
   };
   if (cfg.keyHeader) {
     headers[cfg.keyHeader] =
-      cfg.keyHeader === 'Authorization' ? `Bearer ${apiKey}` : apiKey;
+      cfg.keyHeader === 'Authorization' ? `Bearer ${apiKey.trim()}` : apiKey;
   }
   return headers;
 }
@@ -60,19 +60,22 @@ const buildAnthropic: BuildFn = (id, apiKey, model, system, user) => ({
   }),
 });
 
-const buildOpenAI: BuildFn = (id, apiKey, model, system, user) => ({
-  url: LLM_PROVIDERS[id].endpoint as string,
-  headers: authHeaders(id, apiKey),
-  body: JSON.stringify({
-    model,
-    max_tokens: LLM_CONFIG.MAX_TOKENS,
-    temperature: LLM_CONFIG.TEMPERATURE,
-    messages: [
-      { role: 'system', content: system },
-      { role: 'user', content: user },
-    ],
-  }),
-});
+const buildOpenAI: BuildFn = (id, apiKey, model, system, user) => {
+  const cfg = LLM_PROVIDERS[id] as typeof LLM_PROVIDERS[typeof id] & { maxTokens?: number };
+  return {
+    url: LLM_PROVIDERS[id].endpoint as string,
+    headers: authHeaders(id, apiKey),
+    body: JSON.stringify({
+      model,
+      max_tokens: cfg.maxTokens ?? LLM_CONFIG.MAX_TOKENS,
+      ...(LLM_PROVIDERS[id].supportsTemperature ? { temperature: LLM_CONFIG.TEMPERATURE } : {}),
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: user },
+      ],
+    }),
+  };
+};
 
 // Gemini: model goes in the URL path, system prompt is `systemInstruction`,
 // the user turn is `contents`, and there is no `messages`/`max_tokens`.
