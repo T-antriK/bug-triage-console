@@ -1,0 +1,66 @@
+/* ============================================================
+   tokens.css — the only place colour, type and spacing values live.
+   Concept: an arcade cabinet that boots into a control room.
+   The start screen is the only playful surface; everything past it
+   is a disciplined ops tool someone reads for hours.
+   ============================================================ */
+
+:root {
+  /* surfaces / ink */
+  --paper: #f7f8f6; /* cool off-white, not cream */
+  --ink: #1b2027;
+  --muted: #667085;
+  --rule: #d8dce0;
+  --accent: #1f4d8f; /* interactive only: links, focus rings, primary buttons */
+  --accent-ink: #ffffff;
+  --paper-raised: #ffffff;
+  --paper-sunk: #eef0ee;
+
+  /* severity encodes information, so it gets its own scale and is used nowhere else */
+  --sev0: #b3261e;
+  --sev1: #c77700;
+  --sev2: #2e6bb8;
+  --sev3: #7a8290;
+
+  /* confidence gets a separate scale on purpose — two coloured badges in
+     adjacent table columns must not read as the same axis */
+  --conf-high: #2e7d5b;
+  --conf-medium: #b07a1e;
+  --conf-low: #8a4b3a;
+
+  /* start screen only */
+  --night: #0e1116;
+  --sky-top: #2b4c7e;
+  --sky-bot: #8fb3d9;
+  --grass: #4a6b3a;
+
+  /* type */
+  --font-sans: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial,
+    sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --font-pixel: 'Silkscreen', 'IBM Plex Sans', monospace;
+
+  --fs-body: 15px; /* body minimum */
+  --fs-report: 17px; /* report text */
+  --fs-table: 13px; /* table cells */
+  --fs-small: 13px;
+  --fs-h1: 27px;
+  --fs-h2: 20px;
+  --fs-h3: 16px;
+  --lh-body: 1.6;
+  --lh-tight: 1.35;
+  --measure: 74ch; /* body line length under 80 characters */
+
+  /* spacing scale */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 24px;
+  --s-6: 32px;
+  --s-7: 48px;
+  --s-8: 64px;
+
+  --radius: 4px;
+  --focus-ring: 0 0 0 2px var(--paper), 0 0 0 4px var(--accent);
+}

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="360" viewBox="0 0 800 360">
+  <rect width="800" height="360" fill="#eef0ee"/>
+  <rect x="0.5" y="0.5" width="799" height="359" fill="none" stroke="#d8dce0"/>
+  <text x="400" y="175" text-anchor="middle" font-family="IBM Plex Sans, sans-serif" font-size="18" fill="#667085">Screenshot placeholder</text>
+  <text x="400" y="200" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="13" fill="#667085">public/guide/in-review.svg</text>
+</svg>
