@@ -441,8 +441,8 @@ raw input
   ├─ 1. normalize()         lowercase copy for matching, original kept for display
   ├─ 2a. rules pass         bucket scores + signals from keyword tables
   ├─ 2b. LLM pass           bucket + signals + evidence spans (skipped if no key)
-  ├─ 3. arbitrate()         merge: bucket by precedence, signals by max severity
-  ├─ 4. tiebreaks()         resolve remaining bucket ambiguity
+  ├─ 3. arbitrate()         merge: model wins bucket on disagreement, signals by max severity
+  ├─ 4. tiebreaks()         resolve ambiguity only when one method abstained
   ├─ 5. impactEscalation()  text may raise the dropdown, never lower it
   ├─ 6. severity()          base grid -> floors -> silent modifier
   ├─ 7. routing()           bucket -> team + escalation actions
@@ -451,6 +451,12 @@ raw input
   ├─ 10. questions()        bucket bank + conditionals, capped at 5
   └─ 11. secondaryTags()
 ```
+
+**Bucket arbitration (Iteration 3):** when both classifiers produce a bucket and they
+disagree, the model wins. Rules act as a backstop and as an independent second opinion for
+confidence. Tiebreaks (keyword-based) are skipped when both methods have an opinion — they
+suffer the same language blindness as rules. Confidence drops to Low on disagreement,
+holding the report in review until a human confirms or overrides.
 
 **Signal merge rule:** for each of the seven signals, take the more severe of the rules
 reading and the LLM reading. Either method can escalate; neither can suppress the other.
@@ -541,9 +547,9 @@ e.g. by the seeds.)
 
 - **High** — rules and LLM picked the same bucket and evidence spans verified.
 - **Medium** — same bucket, weak/unverified evidence, or one method abstained.
-- **Low** — different buckets, rules-only with top score under
-  `CLASSIFIER.RULES_TOP_SCORE_LOW_THRESHOLD` (4), or the LLM call failed. Low blocks the
-  Route button until a human confirms or overrides.
+- **Low** — different buckets (model wins the bucket but confidence falls), rules-only with
+  top score under `CLASSIFIER.RULES_TOP_SCORE_LOW_THRESHOLD` (4), or the LLM call failed.
+  Low blocks the Route button until a human confirms or overrides.
 
 ### 6.8 evidence.ts
 

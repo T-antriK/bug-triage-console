@@ -100,6 +100,7 @@ export function buildEvidence(
       start: at.start,
       end: at.end,
       supports: c.supports,
+      provenance: 'rules',
     });
   }
 

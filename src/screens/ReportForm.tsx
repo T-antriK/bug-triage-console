@@ -545,6 +545,10 @@ export default function ReportForm() {
                       {report.rules_bucket}
                       {REPORT_COPY.DISAGREEMENT_MID}
                       {report.llm_bucket}
+                      {REPORT_COPY.DISAGREEMENT_REASON}
+                      {report.rules_matched_patterns && report.rules_matched_patterns.length > 0
+                        ? report.rules_matched_patterns.join(', ')
+                        : 'none'}
                       {REPORT_COPY.DISAGREEMENT_SUFFIX}
                     </p>
                   )}

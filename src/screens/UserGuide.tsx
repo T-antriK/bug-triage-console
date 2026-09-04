@@ -137,6 +137,21 @@ export default function UserGuide() {
       </p>
       <Shot file="in-review.svg" alt="A report in review showing evidence highlights and the override block." />
 
+      <h2>How the classifier decides</h2>
+      <p>
+        Every report runs two passes: a keyword-scoring rules engine and (when a key is
+        configured) a language model. When both return a bucket and they agree, the result
+        is used directly. When they disagree, <strong>the model wins the bucket</strong> —
+        it reads the surrounding language where rules only match words. Rules stay as a
+        backstop: disagreement drops confidence to Low so a human reviews the call before
+        routing. Severity is always computed from signals by a deterministic grid; the
+        model never picks a severity level directly.
+      </p>
+      <p>
+        Evidence highlights are tagged by source. Hover over a highlighted phrase to see
+        whether it came from the rules engine, the language model, or both.
+      </p>
+
       <h2>What the confidence levels mean</h2>
       <ul>
         <li>
@@ -148,8 +163,9 @@ export default function UserGuide() {
           method produced a bucket.
         </li>
         <li>
-          <strong>Low</strong> — they disagreed, the rules score was weak, or the model
-          call failed. Routing is held until a human decides.
+          <strong>Low</strong> — they disagreed (model wins bucket, confidence falls),
+          the rules score was weak, or the model call failed. Routing is held until a
+          human confirms or overrides.
         </li>
       </ul>
 

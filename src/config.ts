@@ -22,10 +22,10 @@ export const FEATURES = {
 // ============================================================
 // STORAGE
 // ============================================================
-// v2 (Iteration 2): TriageReport gained `more_info` and
-// `resolution_note`. The migration in store/storage.ts backfills both
-// as null on existing records without touching anything else.
-export const SCHEMA_VERSION = 2;
+// v2 (Iteration 2): TriageReport gained `more_info` and `resolution_note`.
+// v3 (Iteration 3): TriageReport gained `rules_matched_patterns` and
+// `llm_spans_dropped`. EvidenceSpan gained optional `provenance`.
+export const SCHEMA_VERSION = 3;
 
 export const STORAGE_KEYS = {
   REPORTS: 'triage.reports.v1',
@@ -461,6 +461,8 @@ export const ACTIVITY_TABLE_COLUMNS = [
   'value_to',
   'detail',
   'llm_rationale',
+  'rules_matched_patterns',
+  'llm_spans_dropped',
 ] as const;
 
 export const FEEDBACK_TABLE_COLUMNS = ['id', 'timestamp', 'to', 'body'] as const;
@@ -606,9 +608,10 @@ export const REPORT_COPY = {
   IMPACT_ESCALATED_SUFFIX: '. The report describes a service-level failure.',
   NARROWER_FLAG:
     'The text reads narrower than the selected impact. Left as-is for a human to check, not downgraded.',
-  DISAGREEMENT_PREFIX: 'Rules and the model disagreed: rules said ',
-  DISAGREEMENT_MID: ', model said ',
-  DISAGREEMENT_SUFFIX: '. Rules precedence was used.',
+  DISAGREEMENT_PREFIX: 'Rules and the model disagreed: rules matched ',
+  DISAGREEMENT_MID: ', the model returned ',
+  DISAGREEMENT_REASON: '. The model’s answer was used, because rules match keywords while the model reads the surrounding language. Rules matched on: ',
+  DISAGREEMENT_SUFFIX: '. Confidence lowered to Low — confirm or override before routing.',
   DUPLICATE_PREFIX: 'This looks similar to ',
   DUPLICATE_SUFFIX: ' (in review).',
   DISCARDED_NOTE: 'This report was discarded and is read-only.',

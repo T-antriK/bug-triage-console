@@ -22,7 +22,11 @@ export function EvidenceHighlight({
     if (start > cursor) parts.push(text.slice(cursor, start));
     if (span.end > start) {
       parts.push(
-        <mark className="evidence-mark" key={`m${i}`} title={span.supports}>
+        <mark
+          className="evidence-mark"
+          key={`m${i}`}
+          title={span.supports + (span.provenance ? ` (${span.provenance})` : '')}
+        >
           {text.slice(start, span.end)}
         </mark>,
       );

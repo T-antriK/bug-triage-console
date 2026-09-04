@@ -6,14 +6,14 @@
 // ============================================================
 
 import { describe, expect, it } from 'vitest';
-import { classifyRulesOnly } from '../pipeline';
+import { classifyRulesOnly, runPipeline } from '../pipeline';
 import { severity } from '../severity';
 import { normalize } from '../normalize';
 import { extractSignals } from '../signals';
 import { buildEvidence } from '../evidence';
 import { SEED_INPUTS } from '../../store/seed';
 import { ADVERSARIAL, EXPECTED_SEEDS } from './expected';
-import type { Signals } from '../../types';
+import type { LlmOutcome, Signals } from '../../types';
 
 describe('15 seed reports match the answer key', () => {
   EXPECTED_SEEDS.forEach((expected, i) => {
@@ -110,5 +110,50 @@ describe('classifier provenance in rules-only mode', () => {
     expect(r.classifier_mode).toBe('rules');
     expect(r.llm_bucket).toBeNull();
     expect(r.rules_bucket).toBe(r.bucket);
+  });
+});
+
+describe('model-precedence on bucket disagreement', () => {
+  // ICICI/CRM payment integration report: "same transaction ID logged in both
+  // systems" fires INFRA (transaction, logged) but the report explicitly says
+  // "nobody's seen an error" — a content/post-call problem, not infra.
+  const iciReport = `ICICI Bank integration: same transaction ID appears in our
+logs and in their CRM for a payment that went through on our side but nobody's
+seen an error on their end. We're not receiving post-call confirmation receipts.
+The IVR script completed normally and the status field reads OK.`;
+
+  const llmSaysPostCall: LlmOutcome = {
+    ok: true,
+    pass: {
+      bucket: 'POST_CALL',
+      bucketScores: {} as Record<string, number>,
+      topScore: 0,
+      signals: {
+        functional_loss: 'degraded',
+        data_integrity: 'at_risk',
+        data_loss_ongoing: false,
+        exposure: 'none',
+        exposure_prompt_level: false,
+        silent_failure: true,
+        outage_language: false,
+      },
+      secondary_tags: [],
+      evidence: [{ field: 'bug_report', text: 'post-call confirmation receipts', start: 0, end: 30, supports: 'bucket' }],
+      rationale: 'Report describes missing post-call data, not an infrastructure error.',
+    },
+  };
+
+  it('model wins bucket over rules on disagreement', () => {
+    const r = runPipeline({ bug_report: iciReport, customer: 'ICICI', call_id: null, started_at: null, impact: 'many' }, { llm: llmSaysPostCall });
+    expect(r.bucket, 'model bucket wins').toBe('POST_CALL');
+    expect(r.rules_bucket, 'rules fired INFRA').toBe('INFRA');
+    expect(r.llm_bucket, 'llm said POST_CALL').toBe('POST_CALL');
+    expect(r.confidence, 'confidence drops to Low on disagreement').toBe('Low');
+    expect(r.classifier_mode).toBe('hybrid');
+  });
+
+  it('rules-only still returns INFRA for the same text', () => {
+    const r = classifyRulesOnly({ bug_report: iciReport, customer: 'ICICI', call_id: null, started_at: null, impact: 'many' });
+    expect(r.bucket).toBe('INFRA');
   });
 });

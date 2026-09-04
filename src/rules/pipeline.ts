@@ -124,6 +124,14 @@ export function runRulesPass(input: TriageInput): ClassificationPass & {
 }
 
 // ---- arbitration ----
+// WHY THE MODEL LEADS ON BUCKET
+// Rules match keywords; they do not read language. They misfire on reports
+// where infrastructure vocabulary appears in a description of a content
+// problem. Example: "same transaction ID logged in both... nobody's seen an
+// error" scores INFRA on 'transaction ID' and 'logged' while the report
+// explicitly rules out an error. The model reads the clause and correctly
+// returns POST_CALL. The model leads on bucket. Rules stay as a backstop
+// and as an independent second opinion for confidence.
 export function arbitrate(
   lower: string,
   rules: ReturnType<typeof runRulesPass>,
@@ -145,15 +153,20 @@ export function arbitrate(
   );
 
   let bucket: BucketId;
-  const viaTiebreak = applyTiebreaks(lower, contenders);
   if (rules_bucket && llm_bucket && rules_bucket === llm_bucket) {
+    // Both agree — no disambiguation needed.
     bucket = rules_bucket;
-  } else if (viaTiebreak) {
-    bucket = viaTiebreak.bucket;
   } else if (rules_bucket && llm_bucket) {
-    bucket = byPrecedence([rules_bucket, llm_bucket]) ?? rules_bucket;
+    // Model leads on bucket (see rationale comment above). Rules act as a
+    // backstop: confidence drops to Low on disagreement, blocking auto-route.
+    // Tiebreaks are keyword-based and suffer the same language blindness as
+    // rules; skip them when both methods already have an opinion.
+    bucket = llm_bucket;
   } else {
-    bucket = rules_bucket ?? llm_bucket ?? byPrecedence(contenders) ?? 'INFRA';
+    // Only one method produced a bucket — use tiebreaks to pick among the
+    // rules contenders (or the single LLM bucket if rules abstained).
+    const viaTiebreak = applyTiebreaks(lower, contenders);
+    bucket = viaTiebreak?.bucket ?? rules_bucket ?? llm_bucket ?? byPrecedence(contenders) ?? 'INFRA';
   }
 
   const llm_agreed =
@@ -213,8 +226,11 @@ export function runPipeline(input: TriageInput, opts: RunOptions = {}): Pipeline
   // 8. confidence — needed before escalations (Low blocks auto-route)
   const bucketKeywords = rules.matchedPatterns[merged.bucket] ?? [];
   const rulesBucketSpans = buildEvidence(original, bucketKeywords, lower, merged.signals);
-  const llmSpans = verifyLlmSpans(original, merged.evidence);
+  const { verified: llmSpans, dropped: llm_spans_dropped } = verifyLlmSpans(original, merged.evidence);
   const evidence = dedupeSpans([...rulesBucketSpans, ...llmSpans]).slice(0, MAX_SPANS);
+  const rulesBucketMatchedPatterns = merged.rules_bucket
+    ? (rules.matchedPatterns[merged.rules_bucket] ?? [])
+    : null;
 
   const confidence: Confidence = computeConfidence({
     mode: merged.classifier_mode,
@@ -264,6 +280,8 @@ export function runPipeline(input: TriageInput, opts: RunOptions = {}): Pipeline
     rules_bucket: merged.rules_bucket,
     llm_bucket: merged.llm_bucket,
     llm_rationale: merged.llm_rationale,
+    rules_matched_patterns: rulesBucketMatchedPatterns,
+    llm_spans_dropped,
   };
 }
 
@@ -273,34 +291,44 @@ export function classifyRulesOnly(input: TriageInput): PipelineResult {
 }
 
 // ---- helpers ----
-function verifyLlmSpans(original: string, spans: EvidenceSpan[]): EvidenceSpan[] {
-  const out: EvidenceSpan[] = [];
+function verifyLlmSpans(
+  original: string,
+  spans: EvidenceSpan[],
+): { verified: EvidenceSpan[]; dropped: number } {
+  const verified: EvidenceSpan[] = [];
   const hay = original.toLowerCase();
   for (const span of spans) {
     const idx = hay.indexOf(span.text.toLowerCase());
-    if (idx < 0) continue; // substring guard
-    out.push({
+    if (idx < 0) continue; // substring guard: paraphrase, not a verbatim quote
+    verified.push({
       field: 'bug_report',
       text: original.slice(idx, idx + span.text.length),
       start: idx,
       end: idx + span.text.length,
       supports: span.supports,
+      provenance: 'llm',
     });
   }
-  return out;
+  return { verified, dropped: spans.length - verified.length };
 }
 
 function dedupeSpans(spans: EvidenceSpan[]): EvidenceSpan[] {
-  // Sort by start, then longest-first at a tie, then keep only spans that
-  // do not overlap one already kept. Overlapping keyword hits (e.g. "error"
-  // inside "errors") would otherwise render as a stray one-character mark.
+  // Sort by start, then longest-first at a tie. For overlapping spans with
+  // the same `supports`, promote provenance to 'both' (rules and LLM agreed
+  // on the same stretch). For all other overlaps, drop the shorter span.
   const sorted = [...spans].sort(
     (a, b) => a.start - b.start || b.end - b.start - (a.end - a.start),
   );
   const out: EvidenceSpan[] = [];
   let lastEnd = -1;
   for (const s of sorted) {
-    if (s.start < lastEnd) continue;
+    if (s.start < lastEnd) {
+      const prev = out[out.length - 1];
+      if (prev && s.supports === prev.supports && s.provenance !== prev.provenance) {
+        out[out.length - 1] = { ...prev, provenance: 'both' };
+      }
+      continue;
+    }
     out.push(s);
     lastEnd = s.end;
   }

@@ -42,12 +42,15 @@ export type EvidenceSupport =
   | 'severity.outage_language'
   | 'impact';
 
+export type EvidenceProvenance = 'rules' | 'llm' | 'both';
+
 export type EvidenceSpan = {
   field: 'bug_report';
   text: string;
   start: number;
   end: number;
   supports: EvidenceSupport;
+  provenance?: EvidenceProvenance; // absent on spans from reports predating Iteration 3
 };
 
 // ---- classifier provenance ----
@@ -94,6 +97,8 @@ export type TriageReport = {
   rules_bucket: BucketId | null; // kept separately for the disagreement view
   llm_bucket: BucketId | null;
   llm_rationale: string | null;
+  rules_matched_patterns: string[] | null; // patterns that fired for the rules bucket
+  llm_spans_dropped: number | null; // LLM evidence spans the substring guard rejected
 
   // ---- human override ----
   bucket_final: BucketId;
@@ -218,6 +223,8 @@ export type PipelineResult = {
   rules_bucket: BucketId | null;
   llm_bucket: BucketId | null;
   llm_rationale: string | null;
+  rules_matched_patterns: string[] | null;
+  llm_spans_dropped: number;
 };
 
 // what the LLM client returns to the pipeline

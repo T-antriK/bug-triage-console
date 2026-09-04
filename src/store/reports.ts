@@ -65,6 +65,8 @@ function emptyComputed(): Pick<
   | 'rules_bucket'
   | 'llm_bucket'
   | 'llm_rationale'
+  | 'rules_matched_patterns'
+  | 'llm_spans_dropped'
   | 'bucket_final'
   | 'severity_final'
   | 'routing_final'
@@ -101,6 +103,8 @@ function emptyComputed(): Pick<
     rules_bucket: null,
     llm_bucket: null,
     llm_rationale: null,
+    rules_matched_patterns: null,
+    llm_spans_dropped: null,
     bucket_final: 'INFRA',
     severity_final: 'Sev3',
     routing_final: 'Platform/Infra',
@@ -259,6 +263,8 @@ export function submitReport(
     rules_bucket: result.rules_bucket,
     llm_bucket: result.llm_bucket,
     llm_rationale: result.llm_rationale,
+    rules_matched_patterns: result.rules_matched_patterns,
+    llm_spans_dropped: result.llm_spans_dropped,
     // _final initialised equal to computed
     bucket_final: result.bucket,
     severity_final: result.severity,

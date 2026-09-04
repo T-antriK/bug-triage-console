@@ -73,6 +73,26 @@ Choices made building to `BUILD_SPEC.md`, the tradeoffs, and what was cut.
 - OpenAI support is wired through the same abstraction but only Anthropic was
   exercised against a live (bad) key during development.
 
+## Iteration 3: model-precedence on bucket (arbitration flip)
+
+- **Why the bucket flipped to model-wins.** Rules are keyword scorers; they do not read
+  language. A report that says "same transaction ID logged in both systems — nobody's
+  seen an error" scores INFRA on `transaction`, `ID`, and `logged`. The model reads the
+  clause "nobody's seen an error" and correctly returns POST_CALL. Tiebreaks have the
+  same blindness (they are also keyword-based), so they do not override the model when
+  both methods have an opinion.
+- **Why severity stayed deterministic.** The model never returns a severity level; it
+  returns signals. Severity is computed from signals by a deterministic grid. The signal
+  merge still takes the more severe of the two readings, so the model can escalate but
+  never suppress.
+- **Confidence drops to Low on disagreement.** The report stays in review; a human must
+  confirm or override before routing. This is the correct safety posture: the model leads
+  on language comprehension, but a human resolves genuine ambiguity.
+- **Evidence provenance.** Evidence spans are now tagged `'rules' | 'llm' | 'both'`.
+  Overlapping spans with the same `supports` label from both sources are promoted to
+  `'both'`. Provenance is shown on hover. `llm_spans_dropped` records how many LLM spans
+  failed the verbatim-substring guard (paraphrase, not a direct quote).
+
 ## UI
 
 - **Design:** left-aligned control room, hairline rules instead of card borders, IBM

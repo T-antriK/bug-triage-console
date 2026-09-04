@@ -68,6 +68,30 @@ export function runMigrations(): void {
             row.resolution_note = null;
             changed = true;
           }
+        }
+        if (changed) localStorage.setItem(STORAGE_KEYS.REPORTS, JSON.stringify(rows));
+      }
+    } catch {
+      // A corrupt payload is left untouched; the read helpers fall back to [].
+    }
+  }
+
+  // v2 -> v3: TriageReport gained `rules_matched_patterns` and `llm_spans_dropped`.
+  if (stored < 3) {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.REPORTS);
+      if (raw !== null) {
+        const rows = JSON.parse(raw) as Array<Record<string, unknown>>;
+        let changed = false;
+        for (const row of rows) {
+          if (!('rules_matched_patterns' in row)) {
+            row.rules_matched_patterns = null;
+            changed = true;
+          }
+          if (!('llm_spans_dropped' in row)) {
+            row.llm_spans_dropped = null;
+            changed = true;
+          }
           if (row.schema_version !== SCHEMA_VERSION) {
             row.schema_version = SCHEMA_VERSION;
             changed = true;
