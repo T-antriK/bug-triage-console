@@ -67,6 +67,7 @@ function emptyComputed(): Pick<
   | 'llm_rationale'
   | 'rules_matched_patterns'
   | 'llm_spans_dropped'
+  | 'import_source'
   | 'bucket_final'
   | 'severity_final'
   | 'routing_final'
@@ -105,6 +106,7 @@ function emptyComputed(): Pick<
     llm_rationale: null,
     rules_matched_patterns: null,
     llm_spans_dropped: null,
+    import_source: null,
     bucket_final: 'INFRA',
     severity_final: 'Sev3',
     routing_final: 'Platform/Infra',
@@ -234,6 +236,7 @@ export function submitReport(
   result: PipelineResult,
   llmProvider: string | null,
   llmModel: string | null,
+  importSource: string | null = null,
 ): TriageReport | undefined {
   const rows = readReports();
   const i = rows.findIndex((r) => r.id === id);
@@ -265,6 +268,7 @@ export function submitReport(
     llm_rationale: result.llm_rationale,
     rules_matched_patterns: result.rules_matched_patterns,
     llm_spans_dropped: result.llm_spans_dropped,
+    import_source: importSource,
     // _final initialised equal to computed
     bucket_final: result.bucket,
     severity_final: result.severity,

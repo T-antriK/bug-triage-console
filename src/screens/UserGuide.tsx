@@ -169,6 +169,34 @@ export default function UserGuide() {
         </li>
       </ul>
 
+      <h2>Bulk upload</h2>
+      <p>
+        The <a href={ROUTES.BULK}>Bulk upload</a> screen lets you triage many reports in
+        one go. Download the template, fill it in, and upload it — every valid row lands
+        as a triaged report in <strong>In review</strong>.
+      </p>
+      <p>
+        The template has five columns:{' '}
+        <code>bug_report</code>, <code>customer</code>, <code>call_id</code>,{' '}
+        <code>started_at</code>, <code>impact</code>. Allowed impact values are{' '}
+        <code>single</code>, <code>many</code>, <code>outage</code> (or the display labels{' '}
+        <em>Single caller</em>, <em>Many callers</em>, <em>Outage</em>).{' '}
+        <code>started_at</code> must be <code>YYYY-MM-DD</code> or blank. The other two
+        input columns are optional.
+      </p>
+      <p>
+        After you select a file, a preview table appears before anything is imported. Each
+        row is labelled <strong>Valid</strong>, <strong>Error</strong> (will be skipped —
+        reason shown inline), or <strong>Warning</strong> (will be imported with a note).
+        You can download the error rows as a CSV, fix them, and re-upload.
+      </p>
+      <p>
+        Each imported report runs through the same classification pipeline as a
+        form-submitted report. If a model is configured, calls are sequential (one at a
+        time) to avoid rate limits, with a progress indicator. The batch completes even if
+        individual LLM calls fail; those rows fall back to rules-only as usual.
+      </p>
+
       <h2>Where the data lives and how to export it</h2>
       <p>
         Everything is in your browser’s localStorage — no server, no database. The{' '}

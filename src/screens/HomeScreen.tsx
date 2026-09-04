@@ -26,6 +26,9 @@ export default function HomeScreen() {
         <Link className="nav-btn cell-newreport" to={ROUTES.REPORT_NEW}>
           {HOME_COPY.NAV_NEW}
         </Link>
+        <Link className="nav-btn cell-bulk" to={ROUTES.BULK}>
+          {HOME_COPY.NAV_BULK}
+        </Link>
         <Link className="nav-btn cell-queue" to={ROUTES.QUEUE}>
           {HOME_COPY.NAV_QUEUE}
         </Link>

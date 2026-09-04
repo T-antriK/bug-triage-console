@@ -104,6 +104,30 @@ export function runMigrations(): void {
     }
   }
 
+  // v3 -> v4: TriageReport gained `import_source`.
+  if (stored < 4) {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.REPORTS);
+      if (raw !== null) {
+        const rows = JSON.parse(raw) as Array<Record<string, unknown>>;
+        let changed = false;
+        for (const row of rows) {
+          if (!('import_source' in row)) {
+            row.import_source = null;
+            changed = true;
+          }
+          if (row.schema_version !== SCHEMA_VERSION) {
+            row.schema_version = SCHEMA_VERSION;
+            changed = true;
+          }
+        }
+        if (changed) localStorage.setItem(STORAGE_KEYS.REPORTS, JSON.stringify(rows));
+      }
+    } catch {
+      // A corrupt payload is left untouched; the read helpers fall back to [].
+    }
+  }
+
   try {
     localStorage.setItem(SCHEMA_META_KEY, String(SCHEMA_VERSION));
   } catch {

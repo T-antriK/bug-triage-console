@@ -11,6 +11,7 @@ import UserGuide from './screens/UserGuide';
 import Feedback from './screens/Feedback';
 import DataFiles from './screens/DataFiles';
 import DataTable from './screens/DataTable';
+import BulkUpload from './screens/BulkUpload';
 
 /**
  * Router + layout shell. The start screen is bare; every other route
@@ -40,6 +41,7 @@ export default function App() {
         <Route path={ROUTES.HOME} element={<HomeScreen />} />
         <Route path={ROUTES.REPORT_NEW} element={<ReportForm />} />
         <Route path={`${ROUTES.REPORT}/:id`} element={<ReportForm />} />
+        <Route path={ROUTES.BULK} element={<BulkUpload />} />
         <Route path={ROUTES.QUEUE} element={<TriageQueue />} />
         {FEATURES.ACTIVITY_LOG_ENABLED && (
           <Route path={ROUTES.ACTIVITY} element={<ActivityLog />} />

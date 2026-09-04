@@ -4,9 +4,8 @@
 the repo root and say "Build the app described in BUILD_SPEC.md." Iterate by editing this
 file and re-running.
 
-> This file is the single source of truth. It has been updated through **Iteration 2**;
-> changes from the original spec are marked **`Iteration 2:`** inline. The companion
-> `FOLLOW-UP SPEC — Iteration 2` prompt has been folded in here.
+> This file is the single source of truth. It has been updated through **Iteration 4**;
+> changes are marked by iteration inline.
 
 ---
 
@@ -837,6 +836,14 @@ navigate-on-submit), then the Triage results section (two columns, secondary-tag
 More info), then the queue (toggle filters, no Discarded, confidence badge), then the
 resolution-note modal, then the activity-log value logging. Run the test suite after each
 group.
+
+**Iteration 4 (bulk upload):** CSV parser (`src/lib/csvParser.ts`) first — RFC-4180,
+BOM stripping, no library. Then the BulkUpload screen (`/bulk`): template download,
+column-spec table, drag-and-drop upload zone, preview table (Valid/Error/Warning), import
+via `runTriage` + `submitReport` (same functions as the form), sequential LLM calls with
+delay and progress indicator, batch activity log entry, error-rows CSV download. Schema
+bump to v4 with `import_source` field. Home screen adds a sixth button (Bulk upload) in
+column 1 below New bug report.
 
 ---
 

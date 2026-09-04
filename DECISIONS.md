@@ -274,3 +274,29 @@ Deliberate remaining hold-out misses:
 - **H01, H03, H07, H08, H14, H30 severity** — off by one level. The rules-only floor
   (severity ≥ 21/30) clears at 24/30; chasing these last few would mean keyword rules
   tuned to single sentences, which is exactly what the hold-out exists to catch.
+
+## Iteration 4: bulk upload
+
+- **No library for CSV parsing.** RFC-4180 is small and the most important failure mode
+  (bug reports containing commas) is a one-clause fix. A library would add a dependency
+  and obscure the BOM-stripping logic Excel needs. The parser is ~60 lines.
+- **Preview before commit is mandatory.** Importing on file-select would be faster but
+  gives no recovery path for bad rows. The preview table lets reviewers see the
+  Valid/Error/Warning breakdown before any reports are created.
+- **Same `runTriage` + `submitReport` calls as the form.** This is the key correctness
+  constraint: evidence, reason_chain, next_questions, signals, and confidence are
+  populated identically. A separate code path would drift within weeks.
+- **Sequential LLM calls with a configurable delay (`BULK_LLM_DELAY_MS`).** Parallel
+  calls would hit rate limits on any real provider. 500ms is conservative; it can be
+  lowered in config without touching the screen.
+- **Mid-batch LLM failure falls back to rules-only per row.** The batch never aborts.
+  This matches the single-form behaviour and means the import always completes.
+- **`import_source` is nullable.** Form-created reports carry `null`; bulk-imported
+  reports carry the filename. It is in the Reports data table so a row can be traced
+  back to its CSV.
+- **Schema v4.** The migration is additive: existing records get `import_source: null`
+  without any data loss.
+- **Home screen layout.** Bulk upload goes in column 1 row 2 (below New bug report).
+  Activity log shifts to row 3. Thor's centre column now spans rows 2–3. The three-column
+  grid still holds at desktop width; the mobile fallback (`grid-column: 1 !important`)
+  stacks all buttons in one column as before.

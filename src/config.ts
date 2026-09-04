@@ -25,7 +25,8 @@ export const FEATURES = {
 // v2 (Iteration 2): TriageReport gained `more_info` and `resolution_note`.
 // v3 (Iteration 3): TriageReport gained `rules_matched_patterns` and
 // `llm_spans_dropped`. EvidenceSpan gained optional `provenance`.
-export const SCHEMA_VERSION = 3;
+// v4 (Iteration 4): TriageReport gained `import_source`.
+export const SCHEMA_VERSION = 4;
 
 export const STORAGE_KEYS = {
   REPORTS: 'triage.reports.v1',
@@ -279,6 +280,7 @@ export const ROUTES = {
   HOME: '/home',
   REPORT_NEW: '/report/new',
   REPORT: '/report', // + /:id
+  BULK: '/bulk',
   QUEUE: '/queue',
   ACTIVITY: '/activity',
   GUIDE: '/guide',
@@ -316,6 +318,7 @@ export const ACTIVITY_ACTIONS = {
   DISCARDED: 'report.discarded',
   FEEDBACK_SUBMITTED: 'feedback.submitted',
   SEED_LOADED: 'seed.loaded',
+  BULK_IMPORTED: 'bulk.imported',
 } as const;
 
 export const ACTORS = {
@@ -336,6 +339,10 @@ export const MESSAGES = {
   DISCARD_CONFIRM: 'Discard this report? Nothing will be saved.',
   DISCARD_EXISTING_CONFIRM: 'Discard this report? It stays in the data files but leaves the queue.',
   LLM_RATIONALE_MAX: 140,
+  BULK_IMPORTED_PREFIX: ' reports imported and triaged.',
+  BULK_TEMPLATE_FILENAME: 'bug-triage-template.csv',
+  BULK_MAX_ROWS: 200,
+  BULK_LLM_DELAY_MS: 500,
 } as const;
 
 // ---- Validation copy ----
@@ -448,6 +455,7 @@ export const REPORT_TABLE_COLUMNS = [
   'routed_at',
   'resolved_at',
   'resolution_note',
+  'import_source',
 ] as const;
 
 export const ACTIVITY_TABLE_COLUMNS = [
@@ -537,6 +545,7 @@ export const HOME_COPY = {
   TITLE: 'Bug Triage Console',
   SUBTITLE: 'Messy report in. A recommended bucket, severity, routing, and prompts for more info out. A human confirms before anything routes.',
   NAV_NEW: 'New bug report',
+  NAV_BULK: 'Bulk upload',
   NAV_QUEUE: 'Triage queue',
   NAV_GUIDE: 'User guide',
   NAV_ACTIVITY: 'Activity log',

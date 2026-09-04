@@ -114,6 +114,9 @@ export type TriageReport = {
   submitted_at: string | null;
   routed_at: string | null;
   resolved_at: string | null;
+
+  // ---- bulk import provenance ----
+  import_source: string | null; // filename of the CSV this came from; null for form-created
 };
 
 // ---- activity log ----
